@@ -1,19 +1,306 @@
-# Hospital Management
-A comprehensive Hospital Management Application designed to streamline the workflow in healthcare facilities by integrating key features for managing patients, doctors, appointments, and administration. This app provides a user-friendly interface for both patients and hospital staff, offering real-time data handling, secure authentication, and efficient patient management.
+# QuizArena — Real-Time Multiplayer Quiz Platform
 
-![Screenshot 2024-11-06 100626](https://github.com/user-attachments/assets/2fef9b36-9cf1-44da-a203-d25456f0bf92)
-![Screenshot 2024-11-06 100723](https://github.com/user-attachments/assets/06599776-484e-4178-b685-092f3dc3ad0a)
+A full-stack live quiz application where an organizer creates timed quizzes, players register and compete in real time, and a server-driven leaderboard updates as answers are submitted. Results and prizes are revealed after the overall quiz ends.
+
+---
 
 ## Features
-- **User Authentication:** Separate login portals for patients and administrators
-- **Patient Management:** Add, update, and manage patient records with ease.
-- **Appointment Scheduling:** Schedule, update, and cancel appointments with an intuitive calendar system.
-- **Doctor Management:** Manage doctor profiles, including their schedules and specialties.
-- **Admin Dashboard:** A dedicated admin panel to manage users, track appointments, and monitor hospital activities.
 
- ## Technologies Used
-- **Frontend:** React, Redux, Tailwind CSS
-- **Backend:** Node.js, Express.js
-- **Database:** MongoDB
-- **Authentication:** Jwt authentication
-- **Deployment:** Render & Vercel
+### Admin (Quiz Organizer)
+- Register and authenticate with an admin role
+- Create, edit, and delete quizzes while in **draft**
+- Add questions with multiple-choice options and a marked correct answer
+- Configure per-question timer, overall quiz timer, and prize tiers (top 3 / top 10)
+- Schedule a quiz start time — it auto-goes **live** at the scheduled moment
+- View quiz status, created/started/ends times (displayed in IST)
+
+### Player (Participant)
+- Register and authenticate with a player role
+- Browse upcoming and live quizzes
+- Enter lobby, register with a display name, and wait for the quiz to start
+- Answer questions one-by-one with **Next** / **Final Submit**
+- See running score during play (correctness is **not** revealed mid-quiz)
+- Live side panel: players currently playing, completed count, per-question progress
+- Live leaderboard centered around the current player (±5 ranks) plus top 10 view
+- Result screen with tier-based celebration (top 3, top 10, or finished) after the quiz ends
+
+---
+
+## Tech Stack
+
+| Layer | Choice | Why |
+|-------|--------|-----|
+| Frontend | React 18, Vite, Tailwind CSS | Fast SPA with component-based UI |
+| Backend | FastAPI (Python) | Async-friendly, clear routing, OpenAPI docs |
+| Database | PostgreSQL | Source of truth for quizzes, attempts, answers |
+| Cache / Real-time | Redis | Leaderboard ZSET, presence, pub/sub, per-question deadlines |
+| Transport | WebSockets | Push notifications to refetch live data |
+| Auth | JWT (access + refresh tokens) | Stateless role-based access (admin vs player) |
+| Containers | Docker + Docker Compose | Reproducible local and deployment setup |
+
+---
+
+## Architecture
+
+```
+┌─────────────┐     REST + WS      ┌──────────────┐
+│   React     │ ◄────────────────► │   FastAPI    │
+│  (Browser)  │                    │   Backend    │
+└─────────────┘                    └──────┬───────┘
+                                          │
+                         ┌────────────────┼────────────────┐
+                         ▼                ▼                ▼
+                   PostgreSQL           Redis          Background
+                   (persistent)    (leaderboard,       scheduler
+                                    pub/sub,           (auto start /
+                                    deadlines)         auto finish)
+```
+
+### Data flow during play
+
+1. Player clicks **Next** → `POST /play/quizzes/{id}/answer`
+2. Backend validates server-side deadline, scores the answer, writes to Postgres
+3. Redis leaderboard ZSET is updated
+4. Redis pub/sub publishes `{ "type": "leaderboard" }` and `{ "type": "presence" }`
+5. WebSocket manager broadcasts the signal to all clients in that quiz room
+6. Frontend refetches leaderboard/presence via REST (WS carries signals, not full data)
+
+### Real-time consistency
+
+- **Leaderboard** lives in a Redis sorted set (`ZADD` / `ZREVRANGE`) — atomic under concurrency
+- **Idempotency** guard (`SETNX`) prevents double-scoring the same question
+- **Per-question deadlines** are set once in Redis with `NX` so refetching state cannot reset the timer
+- **Presence counts** for the side panel are read from Postgres attempt rows for accuracy
+
+### Server-authoritative timing
+
+- Per-question timer: Redis key with TTL; server grants points only if the answer arrives before expiry
+- Overall quiz timer: `ends_at` stored in UTC; background scheduler flips status to **finished** when time passes
+- Client timers are display-only — they countdown to server-provided ISO deadlines
+
+### Quiz lifecycle
+
+```
+draft → lobby → live → finished
+```
+
+| Status | Meaning |
+|--------|---------|
+| `draft` | Created by admin; visible to players if scheduled |
+| `lobby` | At least one player registered; waiting for start |
+| `live` | Quiz is running; players can join and answer |
+| `finished` | Overall timer ended or all transitions complete; results available |
+
+A background scheduler runs every 3 seconds to auto-start scheduled quizzes and auto-finish expired ones, then pushes WebSocket events so all connected clients refresh.
+
+---
+
+## Project Structure
+
+```
+one-shop-ai/
+├── backend/
+│   ├── app/
+│   │   ├── main.py                  # FastAPI app, scheduler, routers
+│   │   ├── init_tables.py           # Postgres schema bootstrap
+│   │   ├── core/                    # DB config, auth, exceptions
+│   │   └── features/
+│   │       ├── routers/             # auth, quiz (admin), play, ws routes
+│   │       ├── data_tools/          # Postgres + Redis data access
+│   │       └── utils/               # play logic, quiz logic, ws manager
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── Pages/                   # Login, Browse, Lobby, Play, Result, Admin
+│   │   ├── components/              # TopBar, Timer, Leaderboard, SidePanel
+│   │   ├── hooks/useQuizSocket.js   # WebSocket subscription hook
+│   │   └── api.js                   # Axios client + API helpers
+│   └── Dockerfile
+├── backend.yml                      # Postgres + Redis + backend (dev)
+├── frontend.yml                     # Frontend nginx build
+└── .github/workflows/ci.yml         # Manual Docker Hub publish
+```
+
+---
+
+## Database Schema (Postgres — `app_data` schema)
+
+| Table | Purpose |
+|-------|---------|
+| `users` | Accounts with role (`admin` / `player`) |
+| `refresh_tokens` | Refresh token storage |
+| `quizzes` | Quiz metadata, questions (JSONB), settings, prize, status, timers |
+| `registrations` | Player sign-ups per quiz |
+| `attempts` | One row per player per quiz (score, progress, status) |
+| `answers` | Individual question responses |
+
+---
+
+## API Overview
+
+### Auth — `/auth`
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/register` | Create account (role: admin or player) |
+| POST | `/login` | Get access + refresh tokens |
+| POST | `/logout` | Revoke refresh token |
+| GET | `/me` | Current user info |
+
+### Admin — `/quizzes` (requires admin role)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/` | Create quiz |
+| GET | `/` | List admin's quizzes |
+| GET | `/{id}` | Get quiz (with answers) |
+| PUT | `/{id}` | Update draft quiz |
+| DELETE | `/{id}` | Delete draft quiz |
+| POST | `/{id}/start` | Manually start quiz |
+
+### Player — `/play` (requires player role)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/quizzes` | Browse available quizzes |
+| GET | `/my/attempts` | Player's finished attempts |
+| POST | `/quizzes/{id}/register` | Register for quiz |
+| GET | `/quizzes/{id}/lobby` | Lobby state |
+| POST | `/quizzes/{id}/join` | Enter live quiz |
+| GET | `/quizzes/{id}/state` | Current play state |
+| POST | `/quizzes/{id}/answer` | Submit answer / advance |
+| GET | `/quizzes/{id}/leaderboard` | Window around current player |
+| GET | `/quizzes/{id}/leaderboard/top` | Top 10 |
+| GET | `/quizzes/{id}/presence` | Live activity counts |
+| GET | `/quizzes/{id}/result` | Final result (after quiz ends) |
+
+### WebSocket
+| Path | Room | Events |
+|------|------|--------|
+| `/ws/feed` | global | `{ type: "feed" }` — browse page refresh |
+| `/ws/quiz/{id}` | quiz id | `lobby`, `started`, `leaderboard`, `presence`, `finished` |
+
+---
+
+## Running Locally
+
+### Prerequisites
+- Docker and Docker Compose
+- Node.js 20+ (optional, for frontend dev without Docker)
+
+### Backend stack (Postgres + Redis + API)
+
+```bash
+docker compose -f backend.yml up --build
+```
+
+API available at **http://localhost:8000**  
+Interactive docs at **http://localhost:8000/docs**
+
+### Frontend (production build via nginx)
+
+```bash
+docker compose -f frontend.yml up --build
+```
+
+Frontend available at **http://localhost:5173**
+
+### Frontend dev mode (hot reload)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Set `VITE_API_BASE=http://localhost:8000` if needed (default).
+
+---
+
+## Environment Variables
+
+### Backend
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_DB` | `postgres` | Database name |
+| `POSTGRES_USER` | `postgres` | Database user |
+| `POSTGRES_PASSWORD` | — | Database password |
+| `POSTGRES_HOST` | `localhost` | Database host |
+| `POSTGRES_PORT` | `5432` | Database port |
+| `POSTGRES_SCHEMA` | `app_data` | Application schema |
+| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port |
+| `REDIS_DB` | `0` | Redis database index |
+| `JWT_SECRET` | `change-me-in-production` | JWT signing secret |
+
+### Frontend
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_BASE` | `http://localhost:8000` | Backend API URL (baked at build time) |
+
+---
+
+## Quick Demo Flow
+
+1. **Register admin** at `/register` with role `admin`
+2. **Create a quiz** at `/admin/quizzes/new` — add questions, set overall timer, schedule start time
+3. **Register 2–3 players** (use incognito windows for separate sessions)
+4. Players browse at `/quizzes`, enter lobby, register with display names
+5. When the quiz goes **live** (scheduled or manual start), players click **Join now**
+6. Answer questions with **Next** → **Final Submit**
+7. Wait for overall quiz timer to end → result screen with rank and prize tier
+
+---
+
+## CI/CD — Docker Hub (Manual Trigger)
+
+The pipeline does **not** run on push or pull request. It only runs when you manually trigger it from GitHub Actions.
+
+### Run
+
+1. Go to **Actions** tab → **CI/CD — Docker Hub**
+2. Click **Run workflow**
+3. Fill in:
+   - **dockerhub_username** — your Docker Hub username
+   - **dockerhub_password** — your Docker Hub password or access token
+   - **image_tag** — tag for both images (e.g. `v1`, `latest`)
+   - **vite_api_base** *(optional)* — API URL baked into frontend build (default: `http://localhost:8000`)
+
+### Images pushed
+
+Both images are pushed to the same Docker Hub repository with tag prefixes:
+
+```
+jatin7237/quizzer:backend-{image_tag}
+jatin7237/quizzer:frontend-{image_tag}
+```
+
+Example with tag `v1`:
+- `jatin7237/quizzer:backend-v1`
+- `jatin7237/quizzer:frontend-v1`
+
+---
+
+## Design Decisions & Trade-offs
+
+- **WS as signal, REST as data** — keeps payloads small and avoids stale cached state in WS frames
+- **Redis for live leaderboard** — O(log N) rank updates; Postgres remains the audit trail
+- **Scheduler polling (3s)** — simple and reliable for scheduled start/finish; not sub-second precise
+- **Results gated on quiz end** — players see a waiting screen after Final Submit; leaderboard still updates live
+- **IST display times** — stored as UTC in Postgres, converted to `HH:MM:SS` IST on fetch for admin/player lists
+
+---
+
+## Known Limitations
+
+- No automated test suite yet (scoring, ranking, timer logic are good candidates)
+- No seed/demo script bundled (can be added as an API-based setup script)
+- Speed-based win condition is selectable in the builder but ranking always uses score-then-time
+- Reconnection preserves attempt progress but per-question Redis deadline may expire during disconnect
+- Quizzes without an overall timer (`ends_at = null`) will not auto-finish via the scheduler
+- Backend production Dockerfile should include a `CMD` for uvicorn when deploying the pushed image outside Compose dev setup
+
+---
+
+## License
+
+This project was built as a take-home engineering assignment. Use and extend as needed for evaluation or portfolio purposes.

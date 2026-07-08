@@ -1,0 +1,74 @@
+name: CI/CD — Docker Hub
+
+# Runs only when manually triggered from the GitHub Actions tab.
+# Does NOT run on push, pull_request, or schedule.
+on:
+  workflow_dispatch:
+    inputs:
+      dockerhub_username:
+        description: Docker Hub username
+        required: true
+        type: string
+      dockerhub_password:
+        description: Docker Hub password or access token
+        required: true
+        type: string
+      image_tag:
+        description: Docker image tag (applied to backend and frontend)
+        required: true
+        type: string
+      vite_api_base:
+        description: VITE_API_BASE baked into frontend build
+        required: false
+        default: http://localhost:8000
+        type: string
+
+env:
+  DOCKER_REPO: jatin7237/quizzer
+
+jobs:
+  build-and-push:
+    name: Build and push images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ inputs.dockerhub_username }}
+          password: ${{ inputs.dockerhub_password }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ env.DOCKER_REPO }}:backend-${{ inputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          build-args: |
+            VITE_API_BASE=${{ inputs.vite_api_base }}
+          tags: ${{ env.DOCKER_REPO }}:frontend-${{ inputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### Images pushed to Docker Hub" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.DOCKER_REPO }}:backend-${{ inputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.DOCKER_REPO }}:frontend-${{ inputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY

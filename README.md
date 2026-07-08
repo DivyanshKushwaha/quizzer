@@ -255,15 +255,24 @@ Set `VITE_API_BASE=http://localhost:8000` if needed (default).
 
 The pipeline does **not** run on push or pull request. It only runs when you manually trigger it from GitHub Actions.
 
+### Setup
+
+Add these repository secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Description |
+|--------|-------------|
+| `DOCKERHUB_USERNAME` | Your Docker Hub username |
+| `DOCKERHUB_PASSWORD` | Docker Hub password or access token |
+
 ### Run
 
 1. Go to **Actions** tab → **CI/CD — Docker Hub**
 2. Click **Run workflow**
-3. Fill in:
-   - **dockerhub_username** — your Docker Hub username
-   - **dockerhub_password** — your Docker Hub password or access token
+3. Enter only:
    - **image_tag** — tag for both images (e.g. `v1`, `latest`)
    - **vite_api_base** *(optional)* — API URL baked into frontend build (default: `http://localhost:8000`)
+
+Credentials are read automatically from GitHub secrets — you do not enter them when running the workflow.
 
 ### Images pushed
 

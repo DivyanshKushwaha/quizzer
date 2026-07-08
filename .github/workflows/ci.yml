@@ -5,14 +5,6 @@ name: CI/CD — Docker Hub
 on:
   workflow_dispatch:
     inputs:
-      dockerhub_username:
-        description: Docker Hub username
-        required: true
-        type: string
-      dockerhub_password:
-        description: Docker Hub password or access token
-        required: true
-        type: string
       image_tag:
         description: Docker image tag (applied to backend and frontend)
         required: true
@@ -41,8 +33,8 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ inputs.dockerhub_username }}
-          password: ${{ inputs.dockerhub_password }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Build and push backend image
         uses: docker/build-push-action@v6

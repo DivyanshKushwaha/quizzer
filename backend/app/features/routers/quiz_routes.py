@@ -6,11 +6,11 @@ router = APIRouter(prefix="/quizzes", tags=["Admin - Quizzes"])
 
 
 @router.post("")
-def create_quiz(
+async def create_quiz(
     body: dict = Body(...),
     user=Depends(require_role("admin")),
 ):
-    return db.create_quiz(
+    return await db.create_quiz(
         admin_id=user["user_id"],
         title=body["title"],
         description=body.get("description", ""),
@@ -22,13 +22,13 @@ def create_quiz(
 
 
 @router.get("")
-def list_my_quizzes(user=Depends(require_role("admin"))):
-    return db.list_quizzes(admin_id=user["user_id"], audience="admin")
+async def list_my_quizzes(user=Depends(require_role("admin"))):
+    return await db.list_quizzes(admin_id=user["user_id"], audience="admin")
 
 
 @router.get("/{quiz_id}")
-def get_quiz(quiz_id: int, user=Depends(require_role("admin"))):
-    quiz = db.get_quiz(quiz_id, include_answers=True, audience="admin")
+async def get_quiz(quiz_id: int, user=Depends(require_role("admin"))):
+    quiz = await db.get_quiz(quiz_id, include_answers=True, audience="admin")
     if quiz["admin_id"] != user["user_id"]:
         from core.handler.exception import AuthForbidden
         raise AuthForbidden("Not your quiz")
@@ -36,16 +36,16 @@ def get_quiz(quiz_id: int, user=Depends(require_role("admin"))):
 
 
 @router.put("/{quiz_id}")
-def update_quiz(quiz_id: int, body: dict = Body(...), user=Depends(require_role("admin"))):
-    return db.update_quiz(quiz_id, user["user_id"], **body)
+async def update_quiz(quiz_id: int, body: dict = Body(...), user=Depends(require_role("admin"))):
+    return await db.update_quiz(quiz_id, user["user_id"], **body)
 
 
 @router.delete("/{quiz_id}")
-def delete_quiz(quiz_id: int, user=Depends(require_role("admin"))):
-    db.delete_quiz(quiz_id, user["user_id"])
+async def delete_quiz(quiz_id: int, user=Depends(require_role("admin"))):
+    await db.delete_quiz(quiz_id, user["user_id"])
     return {"message": "Quiz deleted"}
 
 
 @router.post("/{quiz_id}/start")
-def start_quiz(quiz_id: int, user=Depends(require_role("admin"))):
-    return db.start_quiz(quiz_id, user["user_id"])
+async def start_quiz(quiz_id: int, user=Depends(require_role("admin"))):
+    return await db.start_quiz(quiz_id, user["user_id"])

@@ -239,6 +239,35 @@ Set `VITE_API_BASE=http://localhost:8000` if needed (default).
 
 ---
 
+## Seed Script (demo data)
+
+With the backend running, one command creates accounts, a sample quiz, and player registrations:
+
+```bash
+python backend/scripts/seed_demo.py
+```
+
+Options:
+
+| Flag | Effect |
+|------|--------|
+| `--start-now` | Admin starts the quiz immediately (skip scheduled wait) |
+| `--minutes 5` | Schedule auto-start N minutes from now (default: 2) |
+| `API_BASE=...` | Point at a non-default API URL |
+
+**What it creates:**
+
+1. **Admin** — `admin@demo.local` / `Demo@123`
+2. **Players** — `alice@demo.local`, `bob@demo.local`, `carol@demo.local` (same password)
+3. **Quiz** — 3 questions, 20s per question, 5 min overall, prizes for top 3 / top 10
+4. **Registrations** — all three players registered for the quiz
+
+Re-running is safe: existing emails are skipped and the script logs in instead.
+
+After seeding, open the frontend, log in as a player in one browser and admin in another (or incognito), and play.
+
+---
+
 ## Quick Demo Flow
 
 1. **Register admin** at `/register` with role `admin`
@@ -301,9 +330,7 @@ Example with tag `v1`:
 
 ## Known Limitations
 
-- No automated test suite yet (scoring, ranking, timer logic are good candidates)
-- No seed/demo script bundled (can be added as an API-based setup script)
-- Speed-based win condition is selectable in the builder but ranking always uses score-then-time
+- Unit tests cover core `quiz_logic` only; no integration/API test suite yet
 - Reconnection preserves attempt progress but per-question Redis deadline may expire during disconnect
 - Quizzes without an overall timer (`ends_at = null`) will not auto-finish via the scheduler
 - Backend production Dockerfile should include a `CMD` for uvicorn when deploying the pushed image outside Compose dev setup

@@ -1,0 +1,40 @@
+# secrets & local env
+app/.env
+app/.env.*
+
+# python cache & bytecode
+app/**/__pycache__
+app/**/*.py[cod]
+app/**/*$py.class
+app/.pytest_cache
+app/.mypy_cache
+app/.ruff_cache
+app/.hypothesis
+
+# virtual environments
+app/.venv
+app/venv
+app/env
+
+# test & coverage
+app/htmlcov
+app/.coverage
+app/.coverage.*
+app/coverage.xml
+app/.tox
+app/.nox
+
+# logs & runtime junk
+app/**/*.log
+app/**/logs
+app/.cache
+
+# editor & OS
+app/.DS_Store
+app/Thumbs.db
+app/.idea
+app/.vscode
+
+# git
+.git
+.gitignore

@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: "Roboto", system-ui, sans-serif;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+@layer components {
+  .page-bg {
+    @apply min-h-screen bg-gradient-to-b from-slate-50 via-white to-indigo-50/30;
+  }
+
+  .card {
+    @apply bg-white border border-slate-200 rounded-2xl shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-12px_rgba(15,23,42,0.12)];
+  }
+
+  .card-hover {
+    @apply card hover:border-indigo-300 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(15,23,42,0.05),0_16px_36px_-16px_rgba(79,70,229,0.28)] transition-all duration-200;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-800 text-sm
+      placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm
+      border border-indigo-600 shadow-sm shadow-indigo-200/60 transition active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 font-medium text-sm
+      hover:border-slate-400 hover:bg-slate-50 transition;
+  }
+
+  .btn-success {
+    @apply px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm
+      border border-emerald-600 shadow-sm shadow-emerald-200/60 transition active:scale-[0.99];
+  }
+
+  .section-title {
+    @apply text-2xl font-bold text-slate-900 tracking-tight;
+  }
+
+  .section-sub {
+    @apply text-sm text-slate-500 mt-1;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.96); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-pop-in {
+  animation: pop-in 0.35s ease-out both;
+}
+
+@keyframes float-up {
+  0% { transform: translateY(10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-float-up {
+  animation: float-up 0.4s ease-out both;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.35); }
+  70% { box-shadow: 0 0 0 12px rgba(79, 70, 229, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+}
+.animate-pulse-ring {
+  animation: pulse-ring 1.8s infinite;
+}

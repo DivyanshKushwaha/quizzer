@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone, timedelta
 import pytz
@@ -33,22 +34,27 @@ def _parse_dt(value):
     return value
 
 
-def create_quiz(admin_id: str, title: str, description: str, settings: dict, prize: dict,
-                questions: list, start_at=None) -> dict:
+async def create_quiz(admin_id: str, title: str, description: str, settings: dict, prize: dict,
+                      questions: list, start_at=None) -> dict:
     questions = _normalize_questions(questions)
     started_at = _parse_dt(start_at)
     ends_at = _compute_ends_at(started_at, settings)
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """INSERT INTO app_data.quizzes
-                   (admin_id, title, description, settings, prize, questions, started_at, ends_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
-                (admin_id, title, description, json.dumps(settings), json.dumps(prize),
-                 json.dumps(questions), started_at, ends_at),
-            )
-            row = cur.fetchone()
-        conn.commit()
+
+    def _op():
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO app_data.quizzes
+                       (admin_id, title, description, settings, prize, questions, started_at, ends_at)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                    (admin_id, title, description, json.dumps(settings), json.dumps(prize),
+                     json.dumps(questions), started_at, ends_at),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        return row
+
+    row = await asyncio.to_thread(_op)
     return _serialize(row, audience="admin")
 
 
@@ -78,17 +84,19 @@ def activate_scheduled_quizzes(cur, quiz_id: int | None = None) -> list:
     return [r["id"] for r in cur.fetchall()]
 
 
-def run_transitions() -> dict:
+async def run_transitions() -> dict:
     """One tick: flip due quizzes live, expire finished ones. Returns changed quiz ids for WS push."""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            activated = activate_scheduled_quizzes(cur)
-            finished = expire_finished_quizzes(cur)
-            conn.commit()
-    return {"activated": activated, "finished": finished}
+    def _op():
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                activated = activate_scheduled_quizzes(cur)
+                finished = expire_finished_quizzes(cur)
+                conn.commit()
+        return {"activated": activated, "finished": finished}
+    return await asyncio.to_thread(_op)
 
 
-def list_quizzes(status: str | None = None, admin_id: str | None = None, audience: str | None = None):
+async def list_quizzes(status: str | None = None, admin_id: str | None = None, audience: str | None = None):
     sql = """SELECT id, title, description, status, settings, prize,
              started_at, ends_at, created_at FROM app_data.quizzes WHERE 1=1"""
     params = []
@@ -99,23 +107,31 @@ def list_quizzes(status: str | None = None, admin_id: str | None = None, audienc
         sql += " AND admin_id = %s"
         params.append(admin_id)
     sql += " ORDER BY created_at DESC"
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            activate_scheduled_quizzes(cur)
-            expire_finished_quizzes(cur)
-            conn.commit()
-            cur.execute(sql, params)
-            return [_serialize(r, audience=audience) for r in cur.fetchall()]
+
+    def _op():
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                activate_scheduled_quizzes(cur)
+                expire_finished_quizzes(cur)
+                conn.commit()
+                cur.execute(sql, params)
+                return cur.fetchall()
+
+    rows = await asyncio.to_thread(_op)
+    return [_serialize(r, audience=audience) for r in rows]
 
 
-def get_quiz(quiz_id: int, include_answers: bool = False, audience: str | None = None) -> dict:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            activate_scheduled_quizzes(cur, quiz_id)
-            expire_finished_quizzes(cur, quiz_id)
-            conn.commit()
-            cur.execute("SELECT * FROM app_data.quizzes WHERE id = %s", (quiz_id,))
-            row = cur.fetchone()
+async def get_quiz(quiz_id: int, include_answers: bool = False, audience: str | None = None) -> dict:
+    def _op():
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                activate_scheduled_quizzes(cur, quiz_id)
+                expire_finished_quizzes(cur, quiz_id)
+                conn.commit()
+                cur.execute("SELECT * FROM app_data.quizzes WHERE id = %s", (quiz_id,))
+                return cur.fetchone()
+
+    row = await asyncio.to_thread(_op)
     if not row:
         raise AuthNotFound("Quiz not found")
     quiz = _serialize(row, audience=audience)
@@ -127,8 +143,8 @@ def get_quiz(quiz_id: int, include_answers: bool = False, audience: str | None =
     return quiz
 
 
-def update_quiz(quiz_id: int, admin_id: str, **fields) -> dict:
-    quiz = get_quiz(quiz_id, include_answers=True)
+async def update_quiz(quiz_id: int, admin_id: str, **fields) -> dict:
+    quiz = await get_quiz(quiz_id, include_answers=True)
     if quiz["admin_id"] != admin_id:
         raise AuthForbidden("Not your quiz")
     if quiz["status"] != "draft":
@@ -153,28 +169,37 @@ def update_quiz(quiz_id: int, admin_id: str, **fields) -> dict:
     if not updates:
         return quiz
     params.append(quiz_id)
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(f"UPDATE app_data.quizzes SET {', '.join(updates)} WHERE id = %s RETURNING *", params)
-            row = cur.fetchone()
-        conn.commit()
+
+    def _op():
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE app_data.quizzes SET {', '.join(updates)} WHERE id = %s RETURNING *", params)
+                row = cur.fetchone()
+            conn.commit()
+        return row
+
+    row = await asyncio.to_thread(_op)
     return _serialize(row, audience="admin")
 
 
-def delete_quiz(quiz_id: int, admin_id: str):
-    quiz = get_quiz(quiz_id, include_answers=True)
+async def delete_quiz(quiz_id: int, admin_id: str):
+    quiz = await get_quiz(quiz_id, include_answers=True)
     if quiz["admin_id"] != admin_id:
         raise AuthForbidden("Not your quiz")
     if quiz["status"] != "draft":
         raise AuthForbidden("Only draft quizzes can be deleted")
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM app_data.quizzes WHERE id = %s", (quiz_id,))
-        conn.commit()
+
+    def _op():
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM app_data.quizzes WHERE id = %s", (quiz_id,))
+            conn.commit()
+
+    await asyncio.to_thread(_op)
 
 
-def start_quiz(quiz_id: int, admin_id: str) -> dict:
-    quiz = get_quiz(quiz_id, include_answers=True)
+async def start_quiz(quiz_id: int, admin_id: str) -> dict:
+    quiz = await get_quiz(quiz_id, include_answers=True)
     if quiz["admin_id"] != admin_id:
         raise AuthForbidden("Not your quiz")
     if quiz["status"] not in ("draft", "lobby"):
@@ -185,17 +210,22 @@ def start_quiz(quiz_id: int, admin_id: str) -> dict:
     ends_at = None
     if overall_sec:
         ends_at = datetime.now(timezone.utc) + timedelta(seconds=int(overall_sec))
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """UPDATE app_data.quizzes SET status = 'live', started_at = NOW(), ends_at = %s
-                   WHERE id = %s RETURNING *""",
-                (ends_at, quiz_id),
-            )
-            row = cur.fetchone()
-        conn.commit()
-    redis_db.publish_global({"type": "feed"})
-    redis_db.publish(quiz_id, {"type": "started"})
+
+    def _op():
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE app_data.quizzes SET status = 'live', started_at = NOW(), ends_at = %s
+                       WHERE id = %s RETURNING *""",
+                    (ends_at, quiz_id),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        return row
+
+    row = await asyncio.to_thread(_op)
+    await redis_db.publish_global({"type": "feed"})
+    await redis_db.publish(quiz_id, {"type": "started"})
     return _serialize(row, audience="admin")
 
 

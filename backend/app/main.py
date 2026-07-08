@@ -26,14 +26,14 @@ async def _scheduler_loop():
     """Tick server-side: auto-start scheduled quizzes and finish expired ones, then push over WS."""
     while True:
         try:
-            changed = await asyncio.to_thread(quiz_db.run_transitions)
+            changed = await quiz_db.run_transitions()
             if changed["activated"] or changed["finished"]:
-                redis_db.publish_global({"type": "feed"})
+                await redis_db.publish_global({"type": "feed"})
                 for quiz_id in changed["activated"]:
-                    redis_db.publish(quiz_id, {"type": "started"})
+                    await redis_db.publish(quiz_id, {"type": "started"})
                 for quiz_id in changed["finished"]:
-                    play_db.finish_stale_attempts(quiz_id)
-                    redis_db.publish(quiz_id, {"type": "finished"})
+                    await play_db.finish_stale_attempts(quiz_id)
+                    await redis_db.publish(quiz_id, {"type": "finished"})
         except Exception:
             pass
         await asyncio.sleep(SCHEDULER_TICK_SEC)

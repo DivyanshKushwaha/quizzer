@@ -44,7 +44,8 @@ export default function Leaderboard({ quizId, myId, events }) {
               <span className="flex-1 truncate text-slate-700">
                 {r.display_name} {mine && <span className="text-indigo-600 font-medium">(you)</span>}
               </span>
-              <span className="font-mono font-semibold text-slate-900">{r.score ?? ""}</span>
+              <span className="text-xs text-slate-400 shrink-0">Q{(r.question_index ?? 0) + 1}</span>
+              <span className="font-mono font-semibold text-slate-900 w-8 text-right">{r.score ?? 0}</span>
             </div>
           );
         })}

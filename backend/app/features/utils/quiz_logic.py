@@ -3,8 +3,14 @@ from datetime import datetime, timezone
 RANK_MULTIPLIER = 10_000_000
 
 
-def encode_rank_score(score: int, total_time_ms: int) -> float:
-    """Higher score wins; ties broken by lower total time."""
+def encode_rank_score(score: int, total_time_ms: int, win_condition: str = "score") -> float:
+    """Single ZSET value — higher sorts first (ZREVRANK).
+
+    score mode: highest score wins; ties broken by lower total time.
+    speed mode: lowest total time wins; ties broken by higher score.
+    """
+    if win_condition == "speed":
+        return -total_time_ms * RANK_MULTIPLIER + score
     return score * RANK_MULTIPLIER - total_time_ms
 
 
@@ -24,6 +30,8 @@ def check_deadline(deadline: datetime | None) -> bool:
 
 
 def result_tier(rank: int) -> str:
+    if rank <= 0:
+        return "rest"
     if rank <= 3:
         return "top3"
     if rank <= 10:

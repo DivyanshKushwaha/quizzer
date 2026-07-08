@@ -122,7 +122,9 @@ async def submit_answer(quiz_id, player_id, body):
 
     await play_db.update_attempt_progress(attempt["id"], new_score, new_time, next_idx, status)
     display_name = await play_db.get_display_name(quiz_id, player_id)
-    await redis_db.update_leaderboard(quiz_id, player_id, quiz_logic.encode_rank_score(new_score, new_time), {
+    win_condition = (quiz.get("settings") or {}).get("win_condition", "score")
+    rank_score = quiz_logic.encode_rank_score(new_score, new_time, win_condition)
+    await redis_db.update_leaderboard(quiz_id, player_id, rank_score, {
         "score": new_score,
         "question_index": next_idx,
         "display_name": display_name,

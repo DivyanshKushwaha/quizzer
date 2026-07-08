@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { adminApi } from "../api";
+import { adminApi, quizApi } from "../api";
+import useQuizSocket from "../hooks/useQuizSocket";
 import TopBar, { StatusBadge } from "../components/TopBar";
+
+const MEDALS = ["🥇", "🥈", "🥉"];
 
 const PILL_COLORS = {
   slate: "bg-slate-100 text-slate-600 border-slate-200",
@@ -22,12 +25,21 @@ function TimePill({ label, value, color = "slate" }) {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState([]);
+  const [tops, setTops] = useState({});
   const [loading, setLoading] = useState(true);
+  const events = useQuizSocket("feed");
 
   const load = async () => {
     try {
       const { data } = await adminApi.list();
       setQuizzes(data);
+      const ranked = data.filter((q) => q.status === "live" || q.status === "finished");
+      const results = await Promise.all(
+        ranked.map((q) =>
+          quizApi.leaderboardTop(q.id).then(({ data }) => [q.id, data.slice(0, 3)]).catch(() => [q.id, []])
+        )
+      );
+      setTops(Object.fromEntries(results));
     } catch {
       toast.error("Failed to load your quizzes");
     } finally {
@@ -36,6 +48,7 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => { if (events.feed) load(); }, [events.feed]);
 
   const start = async (id) => {
     try {
@@ -92,6 +105,24 @@ export default function AdminDashboard() {
                     <TimePill label="Start" value={q.started_at} color="emerald" />
                     <TimePill label="End" value={q.ends_at} color="rose" />
                   </div>
+                  {(q.status === "live" || q.status === "finished") && (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold text-slate-500 mb-2">Top 3 players</p>
+                      {(tops[q.id]?.length ?? 0) === 0 ? (
+                        <p className="text-xs text-slate-400">No scores yet.</p>
+                      ) : (
+                        <ol className="space-y-1">
+                          {tops[q.id].map((p, i) => (
+                            <li key={p.player_id} className="flex items-center gap-2 text-sm">
+                              <span className="w-5 text-center">{MEDALS[i] || i + 1}</span>
+                              <span className="flex-1 truncate text-slate-700">{p.display_name}</span>
+                              <span className="font-mono font-semibold text-slate-900">{p.score ?? 0}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </div>
+                  )}
                   <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-2">
                     {draft && (
                       <>

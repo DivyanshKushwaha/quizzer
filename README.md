@@ -13,6 +13,8 @@ A full-stack live quiz application where an organizer creates timed quizzes, pla
 - Configure per-question timer, overall quiz timer, and prize tiers (top 3 / top 10)
 - Schedule a quiz start time — it auto-goes **live** at the scheduled moment
 - View quiz status, created/started/ends times (displayed in IST)
+- Real-time dashboard updates via WebSocket (status changes without refresh)
+- Top 3 players with scores per live/finished quiz
 
 ### Player (Participant)
 - Register and authenticate with a player role
@@ -116,9 +118,9 @@ one-shop-ai/
 │   │   ├── hooks/useQuizSocket.js   # WebSocket subscription hook
 │   │   └── api.js                   # Axios client + API helpers
 │   └── Dockerfile
-├── backend.yml                      # Postgres + Redis + backend (dev)
-├── frontend.yml                     # Frontend nginx build
-└── .github/workflows/ci.yml         # Manual Docker Hub publish
+├── backend.yml                      # Postgres + Redis + backend
+├── frontend.yml                     # Frontend (nginx)
+└── backend/scripts/seed_demo.py     # Demo data script
 ```
 
 ---
@@ -179,30 +181,93 @@ one-shop-ai/
 
 ---
 
-## Running Locally
+## Local Setup (Docker Compose)
+
+Everything runs locally with Docker. No manual Postgres/Redis install needed.
 
 ### Prerequisites
-- Docker and Docker Compose
-- Node.js 20+ (optional, for frontend dev without Docker)
 
-### Backend stack (Postgres + Redis + API)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Docker Compose)
+- Python 3.11+ (only for running the optional seed script on your host)
+
+### Step 1 — Start backend (Postgres + Redis + API)
+
+From the project root:
 
 ```bash
 docker compose -f backend.yml up --build
 ```
 
-API available at **http://localhost:8000**  
-Interactive docs at **http://localhost:8000/docs**
+Wait until you see `Application startup complete` in the logs.
 
-### Frontend (production build via nginx)
+| Service | URL |
+|---------|-----|
+| API | http://localhost:8000 |
+| Swagger docs | http://localhost:8000/docs |
+
+Tables are created automatically on first startup (`init_tables.py`).
+
+### Step 2 — Start frontend
+
+Open a **second terminal**, still from the project root:
 
 ```bash
 docker compose -f frontend.yml up --build
 ```
 
-Frontend available at **http://localhost:5173**
+| Service | URL |
+|---------|-----|
+| Web app | http://localhost:5173 |
 
-### Frontend dev mode (hot reload)
+The frontend is built with `VITE_API_BASE=http://localhost:8000` so it talks to the local API.
+
+### Step 3 — (Optional) Seed demo data
+
+With the backend running, in a third terminal:
+
+```bash
+python backend/scripts/seed_demo.py --start-now
+```
+
+This creates an admin, 3 players, a sample quiz, and registers everyone. Password for all accounts: `Demo@123`.
+
+| Role | Email |
+|------|-------|
+| Admin | `admin@demo.local` |
+| Player | `alice@demo.local`, `bob@demo.local`, `carol@demo.local` |
+
+Or skip seeding and register manually at http://localhost:5173/register.
+
+### Step 4 — Play
+
+1. Open http://localhost:5173
+2. Log in as **admin** → create/manage quizzes at `/admin`
+3. Log in as **player** in an incognito window → browse at `/quizzes`
+4. Register in lobby → wait for quiz to go live → **Join now** → answer with **Next** / **Final Submit**
+
+### Run tests (optional)
+
+```bash
+cd backend/app
+pip install -r requirements.txt
+python -m pytest tests/test_quiz_logic.py -v
+```
+
+### Stop everything
+
+```bash
+# Stop backend (Ctrl+C in that terminal, or:)
+docker compose -f backend.yml down
+
+# Stop frontend
+docker compose -f frontend.yml down
+```
+
+Data persists in Docker volumes (`postgres_data`, `redis_data`) until you run `docker compose -f backend.yml down -v` (removes volumes).
+
+### Frontend dev mode (optional, without Docker)
+
+If you prefer hot reload during UI work:
 
 ```bash
 cd frontend
@@ -210,7 +275,7 @@ npm install
 npm run dev
 ```
 
-Set `VITE_API_BASE=http://localhost:8000` if needed (default).
+Ensure the backend from Step 1 is still running. Default API URL is `http://localhost:8000`.
 
 ---
 
@@ -280,44 +345,6 @@ After seeding, open the frontend, log in as a player in one browser and admin in
 
 ---
 
-## CI/CD — Docker Hub (Manual Trigger)
-
-The pipeline does **not** run on push or pull request. It only runs when you manually trigger it from GitHub Actions.
-
-### Setup
-
-Add these repository secrets under **Settings → Secrets and variables → Actions**:
-
-| Secret | Description |
-|--------|-------------|
-| `DOCKERHUB_USERNAME` | Your Docker Hub username |
-| `DOCKERHUB_PASSWORD` | Docker Hub password or access token |
-
-### Run
-
-1. Go to **Actions** tab → **CI/CD — Docker Hub**
-2. Click **Run workflow**
-3. Enter only:
-   - **image_tag** — tag for both images (e.g. `v1`, `latest`)
-   - **vite_api_base** *(optional)* — API URL baked into frontend build (default: `http://localhost:8000`)
-
-Credentials are read automatically from GitHub secrets — you do not enter them when running the workflow.
-
-### Images pushed
-
-Both images are pushed to the same Docker Hub repository with tag prefixes:
-
-```
-jatin7237/quizzer:backend-{image_tag}
-jatin7237/quizzer:frontend-{image_tag}
-```
-
-Example with tag `v1`:
-- `jatin7237/quizzer:backend-v1`
-- `jatin7237/quizzer:frontend-v1`
-
----
-
 ## Design Decisions & Trade-offs
 
 - **WS as signal, REST as data** — keeps payloads small and avoids stale cached state in WS frames
@@ -337,6 +364,3 @@ Example with tag `v1`:
 
 ---
 
-## License
-
-This project was built as a take-home engineering assignment. Use and extend as needed for evaluation or portfolio purposes.

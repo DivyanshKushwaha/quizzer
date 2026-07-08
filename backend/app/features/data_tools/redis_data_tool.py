@@ -7,6 +7,10 @@ def _lb_key(quiz_id: int) -> str:
     return f"quiz:{quiz_id}:lb"
 
 
+def _lb_meta_key(quiz_id: int) -> str:
+    return f"quiz:{quiz_id}:lb_meta"
+
+
 def _presence_key(quiz_id: int) -> str:
     return f"quiz:{quiz_id}:presence"
 
@@ -29,9 +33,29 @@ async def update_leaderboard(quiz_id: int, player_id: str, rank_score: float, me
         r = get_redis_client()
         r.zadd(_lb_key(quiz_id), {player_id: rank_score})
         r.hset(_presence_key(quiz_id), player_id, meta.get("question_index", 0))
+        r.hset(_lb_meta_key(quiz_id), player_id, json.dumps({
+            "score": meta.get("score", 0),
+            "question_index": meta.get("question_index", 0),
+        }))
         r.publish(_channel(quiz_id), json.dumps({"type": "leaderboard"}))
         r.publish(_channel(quiz_id), json.dumps({"type": "presence"}))
     await asyncio.to_thread(_op)
+
+
+def _enrich_lb_rows(r, quiz_id: int, entries: list, start_rank: int) -> list:
+    out = []
+    for i, (pid, sc) in enumerate(entries):
+        row = {"player_id": pid, "rank_score": sc, "rank": start_rank + i}
+        meta_raw = r.hget(_lb_meta_key(quiz_id), pid)
+        if meta_raw:
+            meta = json.loads(meta_raw)
+            row["score"] = meta.get("score", 0)
+            row["question_index"] = meta.get("question_index", 0)
+        else:
+            row["score"] = 0
+            row["question_index"] = 0
+        out.append(row)
+    return out
 
 
 async def get_leaderboard_window(quiz_id: int, player_id: str, window: int = 5) -> list:
@@ -43,7 +67,7 @@ async def get_leaderboard_window(quiz_id: int, player_id: str, window: int = 5) 
         start = max(0, rank - window)
         stop = rank + window
         entries = r.zrevrange(_lb_key(quiz_id), start, stop, withscores=True)
-        return [{"player_id": pid, "rank_score": sc, "rank": start + i + 1} for i, (pid, sc) in enumerate(entries)]
+        return _enrich_lb_rows(r, quiz_id, entries, start + 1)
     return await asyncio.to_thread(_op)
 
 
@@ -51,7 +75,7 @@ async def get_top_leaderboard(quiz_id: int, limit: int = 10) -> list:
     def _op():
         r = get_redis_client()
         entries = r.zrevrange(_lb_key(quiz_id), 0, limit - 1, withscores=True)
-        return [{"player_id": pid, "rank_score": sc, "rank": i + 1} for i, (pid, sc) in enumerate(entries)]
+        return _enrich_lb_rows(r, quiz_id, entries, 1)
     return await asyncio.to_thread(_op)
 
 

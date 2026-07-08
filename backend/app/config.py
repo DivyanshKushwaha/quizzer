@@ -8,18 +8,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Configs(BaseSettings):
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "postgres")
-    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "")
-    POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "localhost")
-    POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
-    POSTGRES_SCHEMA: str = os.getenv("POSTGRES_SCHEMA", "app_data")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB")
+    POSTGRES_USER: str = os.getenv("POSTGRES_USER")
+    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD")
+    POSTGRES_HOST: str = os.getenv("POSTGRES_HOST")
+    POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT"))
+    POSTGRES_SCHEMA: str = os.getenv("POSTGRES_SCHEMA")
 
-    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
-    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
-    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+    REDIS_HOST: str = os.getenv("REDIS_HOST")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB"))
 
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "change-me-in-production")
+    JWT_SECRET: str = os.getenv("JWT_SECRET")
 
 
 

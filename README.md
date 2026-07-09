@@ -281,6 +281,21 @@ Ensure the backend from Step 1 is still running. Default API URL is `http://loca
 
 ---
 
+## CI — Docker Images (GitHub Actions)
+
+Production images are built and pushed via [GitHub Actions](.github/workflows/ci.yml) — no manual `docker build` / `docker push` on your machine.
+
+1. Add repo secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_PASSWORD`
+2. **Actions** → **Quizzer CI** → **Run workflow**
+3. Set **image_tag** (e.g. `quiz_v1`) and **vite_api_base** (production API URL for the frontend build)
+4. Workflow pushes to Docker Hub:
+   - `jatin7237/quizzer:backend-{tag}`
+   - `jatin7237/quizzer:frontend-{tag}`
+
+On the server, pull and run with `backend_prod.yml` / `frontend_prod.yml`.
+
+---
+
 ## Environment Variables
 
 ### Backend
@@ -362,7 +377,7 @@ After seeding, open the frontend, log in as a player in one browser and admin in
 - Unit tests cover core `quiz_logic` only; no integration/API test suite yet
 - Reconnection preserves attempt progress but per-question Redis deadline may expire during disconnect
 - Quizzes without an overall timer (`ends_at = null`) will not auto-finish via the scheduler
-- Backend production Dockerfile should include a `CMD` for uvicorn when deploying the pushed image outside Compose dev setup
+- Backend production Dockerfile includes a `CMD` for uvicorn when deploying the pushed image outside Compose dev setup
 
 ---
 

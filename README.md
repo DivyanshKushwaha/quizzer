@@ -119,7 +119,7 @@ one-shop-ai/
 │   │   └── api.js                   # Axios client + API helpers
 │   └── Dockerfile
 ├── backend.yml                      # Postgres + Redis + backend
-├── frontend.yml                     # Frontend (nginx)
+├── frontend.yml                     # Frontend
 └── backend/scripts/seed_demo.py     # Demo data script
 ```
 

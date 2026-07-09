@@ -1,5 +1,7 @@
 # QuizArena — Real-Time Multiplayer Quiz Platform
 
+**Live app:** [http://13.206.109.182/login](http://13.206.109.182/login)
+
 A full-stack live quiz application where an organizer creates timed quizzes, players register and compete in real time, and a server-driven leaderboard updates as answers are submitted. Results and prizes are revealed after the overall quiz ends.
 
 ---
